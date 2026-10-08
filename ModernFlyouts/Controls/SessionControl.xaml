@@ -72,13 +72,13 @@
             </Grid>
 
             <Grid x:Name="ThumbnailGrid" x:FieldModifier="private" Grid.Column="2">
-                <Grid Height="64" Width="64" Margin="16,16,16,6" Cursor="Hand"
+                <Grid Height="64" Width="{Binding Thumbnail, Converter={StaticResource ThumbnailWidthConverter}}" Margin="16,16,16,6" Cursor="Hand"
                       input:InputHelper.IsTapEnabled="True" input:InputHelper.TappedCommand="{Binding ActivateMediaSourceCommand}">
                     <Border CornerRadius="{DynamicResource FlyoutCornerRadius}" Background="#333333" />
                     <Border CornerRadius="{DynamicResource FlyoutCornerRadius}">
                         <Border.Background>
                             <ImageBrush x:Name="ThumbnailImageBrush" ImageSource="{Binding Thumbnail}"
-                                        Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                        Stretch="UniformToFill" RenderOptions.BitmapScalingMode="NearestNeighbor" />
                         </Border.Background>
                     </Border>
                 </Grid>

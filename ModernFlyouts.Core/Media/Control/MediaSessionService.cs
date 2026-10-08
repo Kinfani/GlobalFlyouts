@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ModernFlyouts.Core.AppInformation;
 using Windows.Media.Control;
@@ -473,9 +474,17 @@ namespace ModernFlyouts.Core.Media.Control
 
         private static BitmapSource TransformThumbnail(string sourceAppUserModelId, BitmapSource bitmapSource)
         {
-            if (!IsSourceAppSpotify(sourceAppUserModelId) || bitmapSource == null)
+            if (bitmapSource == null)
             {
                 return bitmapSource;
+            }
+
+            if (!IsSourceAppSpotify(sourceAppUserModelId))
+            {
+                var dispatcherForTrim = Application.Current?.Dispatcher;
+                return dispatcherForTrim != null && !dispatcherForTrim.CheckAccess()
+                    ? dispatcherForTrim.Invoke(() => TrimLetterbox(bitmapSource))
+                    : TrimLetterbox(bitmapSource);
             }
 
             if (bitmapSource.PixelWidth < 267 || bitmapSource.PixelHeight < 234)
@@ -499,6 +508,52 @@ namespace ModernFlyouts.Core.Media.Control
             }
 
             return croppedBitmap ?? bitmapSource;
+        }
+
+        private const byte LetterboxMaxChannel = 24;
+
+        private static BitmapSource TrimLetterbox(BitmapSource source)
+        {
+            var bgra = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            int width = bgra.PixelWidth;
+            int height = bgra.PixelHeight;
+            int stride = width * 4;
+            var pixels = new byte[stride * height];
+            bgra.CopyPixels(pixels, stride, 0);
+
+            int top = 0;
+            while (top < height / 4 && IsDarkRow(pixels, stride, top))
+            {
+                top++;
+            }
+
+            int bottom = 0;
+            while (bottom < height / 4 && IsDarkRow(pixels, stride, height - 1 - bottom))
+            {
+                bottom++;
+            }
+
+            bool symmetricBars = top > 0 && bottom > 0 && Math.Abs(top - bottom) <= Math.Max(2, height / 50);
+            if (!symmetricBars)
+            {
+                return source;
+            }
+
+            return new CroppedBitmap(source, new Int32Rect(0, top, width, height - top - bottom));
+        }
+
+        private static bool IsDarkRow(byte[] pixels, int stride, int row)
+        {
+            int end = (row + 1) * stride;
+            for (int i = row * stride; i < end; i += 4)
+            {
+                if (pixels[i] > LetterboxMaxChannel || pixels[i + 1] > LetterboxMaxChannel || pixels[i + 2] > LetterboxMaxChannel)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool IsSourceAppSpotify(string sourceAppUserModelId)

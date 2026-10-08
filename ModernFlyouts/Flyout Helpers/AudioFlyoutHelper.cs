@@ -515,7 +515,7 @@ namespace ModernFlyouts
                 if (EnhancedMediaBackendMode == ModernFlyouts.Core.Media.Control.EnhancedMediaBackendMode.Disabled)
                 {
                     EnhancedBackendDiagnosticsMessage = string.Empty;
-                    SwitchMediaSessionManager(new NowPlayingMediaSessionManager());
+                    SwitchMediaSessionManager(new GSMTCMediaSessionManager());
                     return;
                 }
 

@@ -15,11 +15,17 @@ namespace ModernFlyouts.Core.Media.Control
     {
         private const string SpotifyPackagedAumid = "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify";
         private const string SpotifyUnpackagedAumid = "Spotify.exe";
+        private const string ArtworkVerifyReason = "artwork verify";
+        private const string ArtworkRetryReason = "artwork retry";
+        private const int MaxArtworkRetries = 4;
+        private static readonly TimeSpan ArtworkVerifyDelay = TimeSpan.FromMilliseconds(1200);
+        private static readonly TimeSpan ArtworkRetryStep = TimeSpan.FromMilliseconds(400);
 
         private readonly object gate = new();
         private readonly Dictionary<string, GlobalSystemMediaTransportControlsSession> sessionsById = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<GlobalSystemMediaTransportControlsSession, string> sessionIds = new();
         private readonly Dictionary<string, CancellationTokenSource> refreshDebounceTokens = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ArtworkRefreshState> artworkStates = new(StringComparer.OrdinalIgnoreCase);
         private readonly Func<MediaSessionSelectionOptions> getSelectionOptions;
         private readonly ArtworkCache artworkCache;
         private readonly MediaStateStore stateStore = new();
@@ -339,13 +345,73 @@ namespace ModernFlyouts.Core.Media.Control
             try
             {
                 var snapshot = await CreateSnapshotAsync(stableSessionId, session);
+                if (reason == ArtworkVerifyReason)
+                {
+                    artworkCache.Invalidate(snapshot);
+                    snapshot = await CreateSnapshotAsync(stableSessionId, session);
+                }
+
                 stateStore.UpsertSession(snapshot);
+                ScheduleArtworkFollowUp(stableSessionId, session, snapshot);
                 MediaDiagnostics.Trace($"Session snapshot updated ({reason}): {stableSessionId}, {snapshot.PlaybackStatus}, {snapshot.Title}");
             }
             catch (Exception ex)
             {
                 MediaDiagnostics.Exception($"Session refresh failed ({reason}) for {stableSessionId}", ex);
             }
+        }
+
+        private void ScheduleArtworkFollowUp(
+            string stableSessionId,
+            GlobalSystemMediaTransportControlsSession session,
+            MediaSessionSnapshot snapshot)
+        {
+            if (string.IsNullOrEmpty(snapshot.Title))
+            {
+                return;
+            }
+
+            TimeSpan delay;
+            string reason;
+
+            lock (gate)
+            {
+                if (disposed)
+                {
+                    return;
+                }
+
+                if (!artworkStates.TryGetValue(stableSessionId, out var state) ||
+                    !string.Equals(state.Identity, snapshot.MetadataIdentity, StringComparison.OrdinalIgnoreCase))
+                {
+                    artworkStates[stableSessionId] = new ArtworkRefreshState { Identity = snapshot.MetadataIdentity };
+                    delay = ArtworkVerifyDelay;
+                    reason = ArtworkVerifyReason;
+                }
+                else if (snapshot.ThumbnailImage == null && state.Attempts < MaxArtworkRetries)
+                {
+                    state.Attempts++;
+                    delay = ArtworkRetryStep * state.Attempts;
+                    reason = ArtworkRetryReason;
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(delay);
+                await RefreshSessionAsync(stableSessionId, session, reason);
+            });
+        }
+
+        private sealed class ArtworkRefreshState
+        {
+            public string Identity { get; init; }
+
+            public int Attempts { get; set; }
         }
 
         private async Task<MediaSessionSnapshot> CreateSnapshotAsync(
@@ -636,6 +702,7 @@ namespace ModernFlyouts.Core.Media.Control
                 }
 
                 refreshDebounceTokens.Clear();
+                artworkStates.Clear();
 
                 foreach (var session in sessionsById.Values)
                 {

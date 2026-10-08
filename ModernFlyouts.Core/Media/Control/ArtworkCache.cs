@@ -66,6 +66,25 @@ namespace ModernFlyouts.Core.Media.Control
             return null;
         }
 
+        public void Invalidate(MediaSessionSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            lock (gate)
+            {
+                string logicalIdentity = GetLogicalIdentity(snapshot);
+                if (logicalIdentityToKey.TryGetValue(logicalIdentity, out string key))
+                {
+                    entries.Remove(key);
+                    retryCounts.Remove(key);
+                    logicalIdentityToKey.Remove(logicalIdentity);
+                }
+            }
+        }
+
         public void StoreDecoded(MediaSessionSnapshot snapshot, ImageSource image, DateTimeOffset? utcNow = null)
         {
             if (snapshot == null || image == null)

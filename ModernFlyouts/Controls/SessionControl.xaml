@@ -11,6 +11,10 @@
              xmlns:local="clr-namespace:ModernFlyouts"
              mc:Ignorable="d" d:DataContext="{d:DesignInstance designTime:MockMediaSession}"
              Width="{DynamicResource FlyoutWidth}" VerticalAlignment="Top">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="ButtonRevealBackgroundDisabled" Color="Transparent" />
+        <SolidColorBrush x:Key="ToggleButtonRevealBackgroundDisabled" Color="Transparent" />
+    </UserControl.Resources>
     <Border CornerRadius="{DynamicResource FlyoutCornerRadius}">
         <Grid x:Name="ContentGrid">
             <Grid.ColumnDefinitions>

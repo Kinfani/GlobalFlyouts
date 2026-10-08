@@ -178,7 +178,7 @@
                     </Button>
                     <Button x:Name="PlayPauseButton" Command="{Binding PlayOrPauseCommand}"
                             ToolTip="{Binding IsPlaying, Converter={StaticResource PlayPauseButtonTooltipConverter}}"
-                            Margin="40,0" Style="{DynamicResource HighlightedMediaButtonStyle}">
+                            Margin="40,0" Style="{DynamicResource HighlightedMediaButtonStyle}" Background="Transparent">
                         <ui:FontIcon Glyph="{Binding IsPlaying, Converter={StaticResource PlayPauseButtonGlyphConverter}}" FontSize="16" />
                     </Button>
                     <Button x:Name="NextButton" Command="{Binding NextTrackCommand}"
@@ -191,7 +191,7 @@
             <ToggleButton x:Name="MoreControlsButton" Grid.Row="2" Grid.ColumnSpan="3"
                           HorizontalAlignment="Left" VerticalAlignment="Center"
                           ToolTip="{x:Static resx:Strings.SessionControl_MoreControls}" Margin="16,0,0,12"
-                          Style="{DynamicResource ToggleButtonRevealStyle}"
+                          Style="{DynamicResource ToggleButtonRevealStyle}" Background="Transparent"
                           Visibility="{Binding CalculatedMoreControlsButtonVisibility}"
                           IsChecked="{Binding ElementName=ControlsSplitView, Path=IsPaneOpen}">
                 <ui:FontIcon Glyph="{x:Static utils:CommonGlyphs.More}" FontSize="16" />

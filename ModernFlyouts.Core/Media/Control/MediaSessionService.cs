@@ -15,10 +15,11 @@ namespace ModernFlyouts.Core.Media.Control
     {
         private const string SpotifyPackagedAumid = "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify";
         private const string SpotifyUnpackagedAumid = "Spotify.exe";
+        private const string MetadataChangedReason = "metadata changed";
         private const string ArtworkVerifyReason = "artwork verify";
         private const string ArtworkRetryReason = "artwork retry";
         private const int MaxArtworkRetries = 4;
-        private static readonly TimeSpan ArtworkVerifyDelay = TimeSpan.FromMilliseconds(1200);
+        private static readonly TimeSpan ArtworkVerifyDelay = TimeSpan.FromMilliseconds(700);
         private static readonly TimeSpan ArtworkRetryStep = TimeSpan.FromMilliseconds(400);
 
         private readonly object gate = new();
@@ -26,6 +27,7 @@ namespace ModernFlyouts.Core.Media.Control
         private readonly Dictionary<GlobalSystemMediaTransportControlsSession, string> sessionIds = new();
         private readonly Dictionary<string, CancellationTokenSource> refreshDebounceTokens = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, ArtworkRefreshState> artworkStates = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> pendingMetadataRefreshes = new(StringComparer.OrdinalIgnoreCase);
         private readonly Func<MediaSessionSelectionOptions> getSelectionOptions;
         private readonly ArtworkCache artworkCache;
         private readonly MediaStateStore stateStore = new();
@@ -254,7 +256,7 @@ namespace ModernFlyouts.Core.Media.Control
 
         private void Session_MediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args)
         {
-            ScheduleSessionRefresh(sender, "metadata changed");
+            ScheduleSessionRefresh(sender, MetadataChangedReason);
         }
 
         private void Session_PlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
@@ -297,6 +299,11 @@ namespace ModernFlyouts.Core.Media.Control
 
                 cts = new CancellationTokenSource();
                 refreshDebounceTokens[stableSessionId] = cts;
+
+                if (reason == MetadataChangedReason)
+                {
+                    pendingMetadataRefreshes.Add(stableSessionId);
+                }
             }
 
             _ = Task.Run(async () =>
@@ -304,7 +311,17 @@ namespace ModernFlyouts.Core.Media.Control
                 try
                 {
                     await Task.Delay(delay, cts.Token);
-                    await RefreshSessionAsync(stableSessionId, session, reason);
+
+                    string effectiveReason = reason;
+                    lock (gate)
+                    {
+                        if (pendingMetadataRefreshes.Remove(stableSessionId))
+                        {
+                            effectiveReason = MetadataChangedReason;
+                        }
+                    }
+
+                    await RefreshSessionAsync(stableSessionId, session, effectiveReason);
                 }
                 catch (OperationCanceledException)
                 {
@@ -345,7 +362,7 @@ namespace ModernFlyouts.Core.Media.Control
             try
             {
                 var snapshot = await CreateSnapshotAsync(stableSessionId, session);
-                if (reason == ArtworkVerifyReason)
+                if (reason == MetadataChangedReason || reason == ArtworkVerifyReason)
                 {
                     artworkCache.Invalidate(snapshot);
                     snapshot = await CreateSnapshotAsync(stableSessionId, session);
@@ -703,6 +720,7 @@ namespace ModernFlyouts.Core.Media.Control
 
                 refreshDebounceTokens.Clear();
                 artworkStates.Clear();
+                pendingMetadataRefreshes.Clear();
 
                 foreach (var session in sessionsById.Values)
                 {
